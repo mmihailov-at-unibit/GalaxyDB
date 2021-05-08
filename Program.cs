@@ -6,9 +6,7 @@ namespace GalaxyDB
     {
         static void Main(string[] _)
         {
-            DB backend = new DB();
-            REPL frontend = new REPL(backend);
-            frontend.Run();
+            (new REPL(new DB())).Run();
         }
     }
 }

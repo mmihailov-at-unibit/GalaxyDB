@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-
-using System.Diagnostics;
 
 namespace GalaxyDB
 {
@@ -271,7 +268,6 @@ namespace GalaxyDB
 
         public IReadOnlyCollection<string> List(Type bodyType)
         {
-            Debug.WriteLine("List() called with " + bodyType.Name);
             return GetIndex(bodyType).Keys;
         }
 

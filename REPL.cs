@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace GalaxyDB
@@ -7,6 +6,14 @@ namespace GalaxyDB
     interface ICommand
     {
         bool Execute(DB backend);
+    }
+
+    class NOP : ICommand
+    {
+        public bool Execute(DB backend)
+        {
+            return true;
+        }
     }
 
     class PrintError : ICommand
@@ -22,13 +29,11 @@ namespace GalaxyDB
             return true;
         }
 
-        private string error;
+        private readonly string error;
     }
 
     class Add : ICommand
     {
-        public Add(CelestialBody body) => this.body = body;
-
         public Add(CelestialBody body, CelestialBody parent)
         {
             this.body = body;
@@ -167,7 +172,7 @@ namespace GalaxyDB
             }
         }
 
-        Galaxy galaxy;
+        private readonly Galaxy galaxy;
     }
 
     class Exit : ICommand
@@ -184,15 +189,11 @@ namespace GalaxyDB
         // The main REPL loop
         public void Run()
         {
-            Debug.WriteLine("Starting console.");
-
             while (ParseCommand(Console.ReadLine()).Execute(backend));
-
-            Debug.WriteLine("Exiting console.");
         }
 
         // Utility finctions for the parser that consume "tokens" from the string
-        static Regex reWord = new Regex(@"^\s*(?<Word>\S+)\s*(?<Rest> .*)?$", RegexOptions.Compiled);
+        private static readonly Regex reWord = new Regex(@"^\s*(?<Word>\S+)\s*(?<Rest> .*)?$", RegexOptions.Compiled);
         private static bool ConsumeWord(ref string inputBuffer, out string word)
         {
             Match match = reWord.Match(inputBuffer);
@@ -210,7 +211,7 @@ namespace GalaxyDB
             }
         }
 
-        static Regex reName = new Regex(@"^\s*\[(?<Name>[^\]]+)\]\s*(?<Rest> .*)?$", RegexOptions.Compiled);
+        private static readonly Regex reName = new Regex(@"^\s*\[(?<Name>[^\]]+)\]\s*(?<Rest> .*)?$", RegexOptions.Compiled);
         private static bool ConsumeName(ref string inputBuffer, out string name)
         {
             Match match = reName.Match(inputBuffer);
@@ -245,15 +246,14 @@ namespace GalaxyDB
                 }
             }
 
-            number = default(T);
+            number = default;
             return false;
         }
 
         // The parser entry point
         private ICommand ParseCommand(string input)
         {
-            string commandName;
-            ICommand cmd = ConsumeWord(ref input, out commandName) ?
+            ICommand cmd = ConsumeWord(ref input, out string commandName) ?
                 commandName switch
                 {
                     "add" => ParseAdd(ref input),
@@ -263,20 +263,18 @@ namespace GalaxyDB
                     "exit" => new Exit(),
                     _ => new PrintError("Unknown command: " + commandName),
                 }
-            : // No word consumed
-                new PrintError("Syntax error: command expected");
+            : // No word consumed means the line contains only whitespace
+                new NOP();
 
             // This is quite hacky, just like most of the ad-hock parsing here
             return (input.Length == 0 || cmd is PrintError)
                 ? cmd
-                : new PrintError("Extra symbols after command: " + input);
+                : new PrintError("Extra input after command: " + input);
         }
 
         private ICommand ParseAdd(ref string input)
         {
-            string bodyType;
-
-            return ConsumeWord(ref input, out bodyType) ?
+            return ConsumeWord(ref input, out string bodyType) ?
                 bodyType switch
                 {
                     "galaxy" => ParseAddGalaxy(ref input),
@@ -286,7 +284,7 @@ namespace GalaxyDB
                     _ => new PrintError("Unknown celestial body type: " + bodyType),
                 }
             : // No word consumed
-                new PrintError("Syntax error: celestial body type expected after \"add\".");
+                new PrintError("Celestial body type expected after \"add\".");
         }
 
         private ICommand ParseAddGalaxy(ref string input)
@@ -323,7 +321,7 @@ namespace GalaxyDB
 
             Galaxy.AgeUnits units;
 
-            switch (ageStr[ageStr.Length - 1])
+            switch (ageStr[^1])
             {
                 case 'M':
                     units = Galaxy.AgeUnits.million;
@@ -338,7 +336,7 @@ namespace GalaxyDB
             float age;
             try
             {
-                age = float.Parse(ageStr.Substring(0, ageStr.Length - 1));
+                age = float.Parse(ageStr[0..^1]);
             } catch 
             {
                 return new PrintError("Galaxy age must be a float number followed by 'M' or 'B'.");
@@ -382,7 +380,7 @@ namespace GalaxyDB
 
             if (diameter < 0)
             {
-               return new PrintError("Diamter cannot be negative.");
+               return new PrintError("Star diamter cannot be negative.");
             }
 
             int temperature;
@@ -393,7 +391,7 @@ namespace GalaxyDB
 
             if (temperature < 0)
             {
-                return new PrintError("Temperature in Kelvin cannot be negative.");
+                return new PrintError("Star temperature in Kelvin cannot be negative.");
             }
 
             float luminosity;
@@ -440,8 +438,7 @@ namespace GalaxyDB
 
             if (planetTypeStr == "giant" || planetTypeStr == "ice")
             {
-                string secondWord;
-                if (ConsumeWord(ref input, out secondWord))
+                if (ConsumeWord(ref input, out string secondWord))
                 {
                     planetTypeStr += " " + secondWord;
                 }
@@ -451,16 +448,16 @@ namespace GalaxyDB
 
             if (type == Planet.PlanetKind.invalid)
             {
-                return new PrintError("Invalid planettype: " + planetTypeStr);
+                return new PrintError("Invalid planet type: " + planetTypeStr);
             }
 
-            string habitableStr;
-            if (!ConsumeWord(ref input, out habitableStr) || (habitableStr != "yes" && habitableStr != "no")) 
+            string supportsLifeStr;
+            if (!ConsumeWord(ref input, out supportsLifeStr) || (supportsLifeStr != "yes" && supportsLifeStr != "no")) 
             {
                 return new PrintError("Expected \"yes\" or \"no\" after planet type.");
             }
 
-            bool supportsLife = (habitableStr == "yes");
+            bool supportsLife = (supportsLifeStr == "yes");
 
             CelestialBody star = backend.Find(typeof(Star), starName);
             if (star == null)
@@ -500,7 +497,7 @@ namespace GalaxyDB
 
             if (!ConsumeWord(ref input, out bodyTypeStr))
             {
-                return new PrintError("Syntax error: celestial body type expected after \"list\".");
+                return new PrintError("Celestial body type (in plural) expected after \"list\".");
             }
 
             Type bodyType = bodyTypeStr switch
